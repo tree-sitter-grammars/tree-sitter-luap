@@ -1,0 +1,121 @@
+// Luap grammar for tree-sitter (native DSL).
+// Translated from grammar.js.
+
+grammar {
+    language: "luap",
+    inline: [quantifier],
+    conflicts: [[range, set]],
+}
+
+rule pattern {
+    seq(
+        optional(anchor_begin),
+        repeat(choice(
+            alias(token_immediate("$"), character),
+            character,
+            class_pattern,
+            set,
+            negated_set,
+            capture,
+        )),
+        optional(anchor_end),
+    )
+}
+
+rule anchor_begin { token_immediate("^") }
+rule anchor_end { prec(1, token_immediate("$")) }
+
+rule _raw_character {
+    choice(token_immediate(regexp(r"[^%\(\[\.\n]")), ".")
+}
+
+rule character { seq(_raw_character, optional(quantifier)) }
+
+rule escape_char { token_immediate(regexp(r"\W")) }
+
+rule capture_index { token_immediate(regexp(r"[1-9]")) }
+
+rule balanced_match {
+    seq(
+        token_immediate("b"),
+        field(first, alias(token_immediate(regexp(r".")), character)),
+        field(last, alias(token_immediate(regexp(r".")), character)),
+    )
+}
+
+rule frontier_pattern {
+    seq(token_immediate("%f"), choice(set, negated_set))
+}
+
+rule zero_or_more { token_immediate("*") }
+rule shortest_zero_or_more { token_immediate("-") }
+rule one_or_more { token_immediate("+") }
+rule zero_or_one { token_immediate("?") }
+
+rule quantifier {
+    choice(zero_or_more, shortest_zero_or_more, one_or_more, zero_or_one)
+}
+
+rule class {
+    seq(
+        token_immediate("%"),
+        choice(
+            regexp(r"[acdglpsuwxACDGLPSUWX]"),
+            capture_index,
+            balanced_match,
+            escape_char,
+        ),
+    )
+}
+
+rule class_pattern {
+    prec_right(0, seq(choice(class, frontier_pattern), optional(quantifier)))
+}
+
+rule range {
+    prec_dynamic(1, seq(
+        field(from, alias(_raw_character, character)),
+        token_immediate("-"),
+        field(to, alias(regexp(r"[^\]]"), character)),
+    ))
+}
+
+rule set {
+    prec_left(0, seq(
+        token_immediate("["),
+        repeat1(choice(
+            alias(_raw_character, character),
+            alias(token_immediate("-"), character),
+            alias(token_immediate("("), character),
+            range,
+            class,
+        )),
+        token_immediate("]"),
+        optional(quantifier),
+    ))
+}
+
+rule negated_set {
+    prec_left(0, seq(
+        token_immediate("["),
+        token_immediate("^"),
+        repeat1(choice(
+            alias(_raw_character, character),
+            alias(token_immediate("-"), character),
+            alias(token_immediate("("), character),
+            range,
+            class,
+        )),
+        token_immediate("]"),
+        optional(quantifier),
+    ))
+}
+
+rule capture {
+    seq(
+        token_immediate("("),
+        repeat(choice(set, negated_set, class_pattern, character, capture)),
+        token_immediate(")"),
+        optional(quantifier),
+    )
+}
